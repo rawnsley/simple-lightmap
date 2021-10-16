@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+    <body>
+        <canvas id="gl"></canvas>
+
+        <script type="module">
+            import * as THREE from "https://threejs.org/build/three.module.js";
+            import { OrbitControls } from "https://threejs.org/examples/jsm/controls/OrbitControls.js";
+            import { GLTFLoader } from "https://threejs.org/examples/jsm/loaders/GLTFLoader.js";
+            import { RGBELoader } from "https://threejs.org/examples/jsm/loaders/RGBELoader.js";
+            import { GUI } from "https://threejs.org/examples/jsm/libs/dat.gui.module.js";
+
+            const params = {
+                roughness: 1,
+                metalness: 0,
+                exposure: 0.25,
+                physicallyCorrectLights: true,
+                toneMapping: "ACESFilmic",
+                color : '#ffffff',
+            };
+
+            var toneMappingOptions = {
+                None: THREE.NoToneMapping,
+                Linear: THREE.LinearToneMapping,
+                Reinhard: THREE.ReinhardToneMapping,
+                Uncharted2: THREE.Uncharted2ToneMapping,
+                Cineon: THREE.CineonToneMapping,
+                ACESFilmic: THREE.ACESFilmicToneMapping,
+            };
+
+            const WIDTH = 1280;
+            const HEIGHT = 720;
+
+            const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("gl") });
+            renderer.setSize(WIDTH, HEIGHT);
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            renderer.outputEncoding = THREE.sRGBEncoding;
+
+            const scene = new THREE.Scene();
+
+            const camera = new THREE.PerspectiveCamera(40, WIDTH / HEIGHT, 1, 10000);
+            camera.setFocalLength(50);
+            camera.position.set(0, 30, 0);
+            camera.lookAt(0, 0, 0);
+
+            const controls = new OrbitControls(camera, renderer.domElement);
+
+            const gui = new GUI();
+            gui.add(params, "roughness", 0, 1, 0.01).onChange(updateParams);
+            gui.add(params, "metalness", 0, 1, 0.01).onChange(updateParams);
+            gui.add(params, "toneMapping", Object.keys(toneMappingOptions)).onChange(updateParams);
+            gui.add(params, "exposure", 0, 4, 0.01).onChange(updateParams);
+            gui.add(params, "physicallyCorrectLights", true).onChange(updateParams);
+            gui.addColor(params, "color").onChange(updateParams);
+            gui.open();
+
+
+            const environmentLoader = new RGBELoader().setDataType(THREE.UnsignedByteType);
+            environmentLoader.load("abandoned_hopper_terminal_04_2k.hdr", function (texture, textureData) {
+                texture.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = texture;
+                const pmremGenerator = new THREE.PMREMGenerator(renderer);
+                scene.environment = pmremGenerator.fromEquirectangular(texture).texture;
+            });
+
+            var plane;
+            var gltfLoader = new GLTFLoader();
+            gltfLoader.load("simple-lightmap.glb", function (gltf) {
+                plane = gltf.scene.getObjectByName("Plane");
+                plane.material.map = null;
+                scene.add(plane);
+                const loader = new RGBELoader().setDataType(THREE.UnsignedByteType);
+                loader.load("Lightmap.hdr", function (texture, textureData) {
+                    texture.flipY = false;
+                    plane.material.lightMap = texture;
+                    plane.material.needsUpdate = true;
+                });
+
+                updateParams();
+            });
+
+            renderer.setAnimationLoop(function () {
+                controls.update();
+                renderer.render(scene, camera);
+            });
+
+            function updateParams() {
+                plane.material.roughness = params.roughness;
+                plane.material.metalness = params.metalness;
+                plane.material.color.set(params.color);
+
+                renderer.toneMappingExposure = params.exposure;
+                renderer.physicallyCorrectLights = params.physicallyCorrectLights;
+                renderer.toneMapping = toneMappingOptions[params.toneMapping];
+
+                scene.traverse((o) => {
+                    if (o.material) o.material.needsUpdate = true;
+                });
+            }
+
+        </script>
+    </body>
+</html>
